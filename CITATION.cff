@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "ICESat-2 Data Explorer"
+type: software
+version: 0.10.0
+date-released: 2026-08-10
+license: GPL-2.0-or-later
+authors:
+  - family-names: Andrade
+    given-names: Laura Coelho de
+  - family-names: Lowell
+    given-names: Kim Earle
+  - family-names: Medeiros
+    given-names: Nilcilene das Gracas
+  - family-names: Silva
+    given-names: Arthur Amaral e
+  - family-names: Ferreira
+    given-names: Italo Oliveira
+repository-code: "https://github.com/REPLACE_WITH_ACCOUNT/REPLACE_WITH_REPOSITORY"
+url: "https://github.com/REPLACE_WITH_ACCOUNT/REPLACE_WITH_REPOSITORY"
+keywords:
+  - ICESat-2
+  - QGIS
+  - SlideRule
+  - bathymetry
+  - hydrography
+  - lidar

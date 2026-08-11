@@ -1,0 +1,43 @@
+ICESat-2 Data Explorer v0.6.1 — Installation and portability
+==============================================================
+
+Recommended QGIS target
+-----------------------
+QGIS 3.44.1 (Python 3.12), Windows.
+The metadata declares QGIS 3.34 as the minimum version, but this build was
+prepared around the QGIS 3.44.1 environment used during development.
+
+Install from ZIP
+----------------
+1. Open QGIS.
+2. Plugins > Manage and Install Plugins > Install from ZIP.
+3. Select the complete ZIP file.
+4. Enable ICESat-2 Data Explorer.
+
+External dependencies
+---------------------
+The plugin folder contains the plugin code, icons and report templates.
+It does not bundle the SlideRule Python client or its compiled scientific
+Python dependencies.
+
+ATL03, ATL08, ATL13 and ATL24 downloads require the SlideRule Python client
+to be installed and importable in the Python environment used by QGIS.
+
+Model tide support is managed separately by the plugin. On a new QGIS
+profile or computer, open Model Tide Values and run Install tide support,
+then download GOT4.10c.
+
+Important Windows note
+----------------------
+A separate user-level Python package folder such as:
+
+    C:\Users\<user>\AppData\Roaming\Python\Python312\site-packages
+
+can override the scientific packages shipped with QGIS. If QGIS imports
+NumPy from that folder and reports binary/import errors, reinstalling QGIS
+alone may not remove the conflicting user-level packages.
+
+
+QGIS OFFICIAL REPOSITORY NOTE
+-----------------------------
+This distribution targets QGIS 3.44-3.99 and is experimental until Linux/macOS validation is completed. External dependencies are installed at runtime; no binary wheels or tide-model files are bundled in the plugin ZIP.

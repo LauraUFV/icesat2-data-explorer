@@ -1,0 +1,23 @@
+[general]
+name=ICESat-2 Data Explorer
+description=Access and analyze ICESat-2 ATL03, ATL08, ATL13 and ATL24 data in QGIS with interactive profiles, provenance reports and optional model-tide values.
+about=ICESat-2 Data Explorer provides multi-product ICESat-2 access through SlideRule, interactive RGT/cycle/beam profiles, reproducible GeoPackage and HTML outputs, robust large-area ATL03 batching, and optional GOT4.10c ocean-tide evaluation through pyTMD. External Python dependencies are installed on demand into plugin-managed storage: SlideRule Python client 5.5.0 for data access and, optionally, pyTMD 3.0.9 plus its isolated tide environment. GOT4.10c is downloaded at runtime and is not bundled. Requires QGIS 3.44 or later; QGIS 3.44 LTR on Windows has been functionally validated. QGIS 3.30 is not supported for automatic dependency setup. Unlike satellite-derived-bathymetry raster/ML plugins, this plugin focuses on direct ICESat-2 ATL03/ATL08/ATL13/ATL24 access, inspection, profiling, provenance reporting and tide-aware analysis.
+version=0.10.0
+qgisMinimumVersion=3.44
+qgisMaximumVersion=3.99
+author=Laura Coelho de Andrade et al.
+email=laura.andrade@ufv.br
+category=Vector
+tags=icesat-2,lidar,sliderule,bathymetry,hydrography,remote sensing,atl03,atl08,atl13,atl24
+homepage=https://github.com/REPLACE_WITH_ACCOUNT/REPLACE_WITH_REPOSITORY
+repository=https://github.com/REPLACE_WITH_ACCOUNT/REPLACE_WITH_REPOSITORY
+tracker=https://github.com/REPLACE_WITH_ACCOUNT/REPLACE_WITH_REPOSITORY/issues
+license=GPL-2.0-or-later
+experimental=True
+deprecated=False
+hasProcessingProvider=False
+icon=icons/plugin.svg
+changelog=0.10.0 - Adds acquisition dates to RGT/cycle/beam profile combinations, user-selectable profile axes and improved combo-box popup styling. Preserves ATL03 Version 7 and ATL24 Version 2/current plus Version 1 legacy comparison.
+    0.9.0 - Adds robust large-area ATL03 processing with CMR granule discovery, retries, beam fallback and incremental GeoPackage writing.
+    0.8.2 - Corrects ATL08 quality-score controls to 0-100 and adds tide-reduced depth output while preserving source depth.
+    0.8.1 - Adds ATL24 Version 2/current and Version 1 legacy comparison with data-discovery diagnostics.
