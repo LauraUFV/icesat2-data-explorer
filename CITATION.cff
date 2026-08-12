@@ -11,13 +11,13 @@ authors:
   - family-names: Lowell
     given-names: Kim Earle
   - family-names: Medeiros
-    given-names: Nilcilene das Gracas
+    given-names: Nilcilene das Graças
   - family-names: Silva
     given-names: Arthur Amaral e
   - family-names: Ferreira
-    given-names: Italo Oliveira
-repository-code: "https://github.com/REPLACE_WITH_ACCOUNT/REPLACE_WITH_REPOSITORY"
-url: "https://github.com/REPLACE_WITH_ACCOUNT/REPLACE_WITH_REPOSITORY"
+    given-names: Ítalo Oliveira
+repository-code: "https://github.com/LauraUFV/icesat2-data-explorer"
+url: "https://github.com/LauraUFV/icesat2-data-explorer"
 keywords:
   - ICESat-2
   - QGIS
