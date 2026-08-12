@@ -61,13 +61,13 @@ A GEOINFO 2026 tools paper is being prepared. Until publication, cite the softwa
 
 ## Source, issues and documentation
 
-**Before publication in the QGIS repository, replace the repository placeholders in `metadata.txt` with the public source repository and issue tracker URLs.**
+- [Source repository](https://github.com/LauraUFV/icesat2-data-explorer)
+- [Issue tracker](https://github.com/LauraUFV/icesat2-data-explorer/issues)
 
 ## Documentation
 
 - [User Guide](docs/USER_GUIDE.md)
-- [Manual do Usuário - Português](docs/USER_GUIDE_pt-BR.md)
 - [PDF User Manual](docs/ICESat2_Data_Explorer_User_Manual_v0.10.0.pdf)
-- [Manual do Usuário - PDF](docs/ICESat2_Data_Explorer_Manual_do_Usuario_v0.10.0.pdf)
 
 The User Guide covers installation, ATL03/ATL08/ATL13/ATL24 acquisition, interactive profile tools, model tide processing, reports, and troubleshooting.
+
