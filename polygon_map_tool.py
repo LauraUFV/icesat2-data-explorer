@@ -42,7 +42,7 @@ class PolygonMapTool(QgsMapTool):
 
         self.rubber_band = QgsRubberBand(
             self.canvas,
-            QgsWkbTypes.PolygonGeometry,
+            QgsWkbTypes.GeometryType.PolygonGeometry,
         )
 
         self.rubber_band.setFillColor(
@@ -59,7 +59,7 @@ class PolygonMapTool(QgsMapTool):
         """
         Add a vertex with the left mouse button or finish with the right one.
         """
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             map_point = self.toMapCoordinates(
                 event.pos()
             )
@@ -72,7 +72,7 @@ class PolygonMapTool(QgsMapTool):
 
             self._refresh_rubber_band()
 
-        elif event.button() == Qt.RightButton:
+        elif event.button() == Qt.MouseButton.RightButton:
             self.finish_polygon()
 
     def canvasMoveEvent(self, event) -> None:
@@ -96,7 +96,7 @@ class PolygonMapTool(QgsMapTool):
         """
         Cancel polygon drawing when Escape is pressed.
         """
-        if event.key() == Qt.Key_Escape:
+        if event.key() == Qt.Key.Key_Escape:
             self.cancel_drawing()
             return
 
@@ -180,7 +180,7 @@ class PolygonMapTool(QgsMapTool):
         Update the polygon preview shown on the QGIS canvas.
         """
         self.rubber_band.reset(
-            QgsWkbTypes.PolygonGeometry
+            QgsWkbTypes.GeometryType.PolygonGeometry
         )
 
         if not self.vertices:
@@ -220,7 +220,7 @@ class PolygonMapTool(QgsMapTool):
         self.preview_point = None
 
         self.rubber_band.reset(
-            QgsWkbTypes.PolygonGeometry
+            QgsWkbTypes.GeometryType.PolygonGeometry
         )
 
         self.canvas.refresh()

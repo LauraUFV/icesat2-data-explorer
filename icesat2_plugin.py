@@ -30,12 +30,15 @@ from .sliderule_support import (
 )
 
 
+ATL03_INVALID_EXTENTS_PARAMETER = "pass_invalid"
+
+
 class ICESat2DataExplorerPlugin:
     """
     Main QGIS plugin class.
     """
 
-    PLUGIN_VERSION = "0.10.0"
+    PLUGIN_VERSION = "0.10.1"
 
     ATL24_LAYER_NAME = "atl24_bathymetry"
     ATL08_LAYER_NAME = "atl08_segments"
@@ -155,7 +158,7 @@ class ICESat2DataExplorerPlugin:
             "ICESat2DataExplorerToolbar"
         )
         self.toolbar.setToolButtonStyle(
-            Qt.ToolButtonIconOnly
+            Qt.ToolButtonStyle.ToolButtonIconOnly
         )
         self.toolbar.setIconSize(QSize(24, 24))
 
@@ -421,11 +424,12 @@ class ICESat2DataExplorerPlugin:
                 "pandas, GeoPandas, GDAL or other QGIS packages.\n\n"
                 "An internet connection is required. Continue?"
             ),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
         )
 
-        if response != QMessageBox.Yes:
+        if response != QMessageBox.StandardButton.Yes:
             return
 
         task = SlideruleInstallTask()
@@ -1190,7 +1194,7 @@ class ICESat2DataExplorerPlugin:
         # extents is important for small coastal AOIs and permissive photon
         # filters; otherwise valid individual photons can be excluded because
         # the surrounding extent fails a default spread/count check.
-        parameters["pass_invalid"] = True
+        parameters[ATL03_INVALID_EXTENTS_PARAMETER] = True
 
         geophysics_fields = list(
             self.ATL03_GEOPHYSICS_FIELDS
@@ -1201,7 +1205,7 @@ class ICESat2DataExplorerPlugin:
             "srt": surface_type,
             "cnf": confidence,
             "quality_ph": quality,
-            "pass_invalid": True,
+            ATL03_INVALID_EXTENTS_PARAMETER: True,
             "atl03_corr_fields": geophysics_fields,
             "granule.version": "007",
         }
@@ -1279,11 +1283,12 @@ class ICESat2DataExplorerPlugin:
                     "Install it now? The plugin will install only the pure-Python "
                     "SlideRule client in its own local folder."
                 ),
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
             )
 
-            if response == QMessageBox.Yes:
+            if response == QMessageBox.StandardButton.Yes:
                 self.install_or_repair_sliderule_support()
 
             return

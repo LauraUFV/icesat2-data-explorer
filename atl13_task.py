@@ -38,7 +38,7 @@ class ATL13DownloadTask(QgsTask):
     ):
         super().__init__(
             "Download ATL13 inland-water segments",
-            QgsTask.CanCancel,
+            QgsTask.Flag.CanCancel,
         )
 
         self.parameters = parameters

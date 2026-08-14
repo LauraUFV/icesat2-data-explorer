@@ -30,7 +30,7 @@ class ATL24DownloadTask(QgsTask):
     ):
         super().__init__(
             "Download ATL24 bathymetry",
-            QgsTask.CanCancel,
+            QgsTask.Flag.CanCancel,
         )
 
         self.parameters = parameters

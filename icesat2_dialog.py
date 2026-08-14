@@ -907,19 +907,19 @@ class ICESat2Dialog(QDialog):
                 "ICESat-2 Data Explorer",
                 "Download, document and visualize ICESat-2 products in QGIS.",
                 "plugin.svg",
-                "v0.10.0",
+                "v0.10.1",
             )
         )
 
         scroll_area = QScrollArea(self)
         scroll_area.setObjectName("ICESat2MainScrollArea")
         scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarAsNeeded
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
         scroll_area.setVerticalScrollBarPolicy(
-            Qt.ScrollBarAsNeeded
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
 
         content_widget = QWidget()
@@ -938,7 +938,9 @@ class ICESat2Dialog(QDialog):
 
         self.product_badge = QLabel("ATL24")
         self.product_badge.setObjectName("ICESat2ProductBadge")
-        self.product_badge.setAlignment(Qt.AlignCenter)
+        self.product_badge.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
         selection_layout.addWidget(self.product_badge, 0, 2)
         selection_layout.addWidget(self.data_source_label, 0, 3)
 

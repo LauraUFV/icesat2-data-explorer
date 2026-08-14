@@ -658,12 +658,12 @@ class ICESat2ProfileDialog(QDialog):
         if hasattr(value, "toPyDateTime"):
             try:
                 return value.toPyDateTime().date().isoformat()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         if hasattr(value, "date"):
             try:
                 return value.date().isoformat()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         text = str(value).strip()
         match = re.search(r"\d{4}-\d{2}-\d{2}", text)
@@ -781,7 +781,7 @@ class ICESat2ProfileDialog(QDialog):
 
         request = QgsFeatureRequest()
         request.setSubsetOfAttributes(filter_fields, self.layer.fields())
-        request.setFlags(QgsFeatureRequest.NoGeometry)
+        request.setFlags(QgsFeatureRequest.Flag.NoGeometry)
 
         combinations: dict[
             tuple[Any, Any, Any], dict[str, Any]
@@ -1343,7 +1343,7 @@ class ICESat2ProfileDialog(QDialog):
 
         request = QgsFeatureRequest()
         request.setSubsetOfAttributes(required_fields, self.layer.fields())
-        request.setFlags(QgsFeatureRequest.NoGeometry)
+        request.setFlags(QgsFeatureRequest.Flag.NoGeometry)
 
         fids, longitude_values, latitude_values = [], [], []
         x_values, y_values = [], []
@@ -1436,7 +1436,7 @@ class ICESat2ProfileDialog(QDialog):
                     False
                 )
                 self.rectangle_selector.disconnect_events()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
             self.rectangle_selector = None
@@ -1628,10 +1628,10 @@ class ICESat2ProfileDialog(QDialog):
         modifiers = (
             gui_event.modifiers()
             if gui_event
-            else Qt.NoModifier
+            else Qt.KeyboardModifier.NoModifier
         )
 
-        if modifiers & Qt.ControlModifier:
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
             selected_ids = set(
                 self.layer.selectedFeatureIds()
             )
@@ -1926,11 +1926,12 @@ class ICESat2ProfileDialog(QDialog):
                 "the current profile?\n\n"
                 "The source layer and GeoPackage will not be modified."
             ),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
 
-        if answer != QMessageBox.Yes:
+        if answer != QMessageBox.StandardButton.Yes:
             return
 
         self.rejected_fids.update(

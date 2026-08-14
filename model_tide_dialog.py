@@ -96,7 +96,7 @@ class ModelTideDialog(QDialog):
         )
         self.storage_label.setWordWrap(True)
         self.storage_label.setTextInteractionFlags(
-            Qt.TextSelectableByMouse
+            Qt.TextInteractionFlag.TextSelectableByMouse
         )
 
         self.model_label = QLabel(
@@ -138,7 +138,7 @@ class ModelTideDialog(QDialog):
         self.output_label = QLabel("—")
         self.output_label.setWordWrap(True)
         self.output_label.setTextInteractionFlags(
-            Qt.TextSelectableByMouse
+            Qt.TextInteractionFlag.TextSelectableByMouse
         )
 
         self.install_button = QPushButton(
@@ -724,12 +724,12 @@ class ModelTideDialog(QDialog):
             self,
             title,
             message,
-            QMessageBox.Yes
-            | QMessageBox.No,
-            QMessageBox.Yes,
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
         )
 
-        if response != QMessageBox.Yes:
+        if response != QMessageBox.StandardButton.Yes:
             return
 
         task = TideSupportInstallTask()
@@ -754,12 +754,12 @@ class ModelTideDialog(QDialog):
             "NetCDF model from NASA GSFC to its managed "
             "local storage. This is normally required "
             "only once.\n\nContinue?",
-            QMessageBox.Yes
-            | QMessageBox.No,
-            QMessageBox.Yes,
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
         )
 
-        if response != QMessageBox.Yes:
+        if response != QMessageBox.StandardButton.Yes:
             return
 
         task = TideModelDownloadTask()

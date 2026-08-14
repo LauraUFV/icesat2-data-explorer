@@ -51,7 +51,7 @@ def date_only(
     ):
         try:
             return value.date().isoformat()
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     if hasattr(
@@ -372,4 +372,3 @@ def attribute_dictionary(
     return "".join(
         blocks
     )
-

@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import sys
 import tempfile
 import traceback
@@ -19,7 +19,7 @@ SLIDERULE_VERSION = "5.5.0"
 
 def support_root() -> Path:
     local_data = QStandardPaths.writableLocation(
-        QStandardPaths.AppLocalDataLocation
+        QStandardPaths.StandardLocation.AppLocalDataLocation
     )
 
     if not local_data:
@@ -121,7 +121,7 @@ def qgis_base_python() -> Path:
                     apps_directory / "bin" / "python",
                 ]
             )
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     current_executable = Path(sys.executable)
@@ -222,7 +222,7 @@ class SlideruleInstallTask(QgsTask):
     def __init__(self):
         super().__init__(
             "Install ICESat-2 download support",
-            QgsTask.CanCancel,
+            QgsTask.Flag.CanCancel,
         )
         self.error_message = ""
         self.error_traceback = ""
@@ -241,7 +241,7 @@ class SlideruleInstallTask(QgsTask):
         command: list[str],
         environment: dict[str, str] | None = None,
     ) -> str:
-        self._process = subprocess.Popen(
+        self._process = subprocess.Popen(  # nosec B603
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -254,8 +254,13 @@ class SlideruleInstallTask(QgsTask):
 
         lines: list[str] = []
 
-        assert self._process.stdout is not None
-        for line in iter(self._process.stdout.readline, ""):
+        process_stdout = self._process.stdout
+        if process_stdout is None:
+            raise RuntimeError(
+                "The installer process output stream is unavailable."
+            )
+
+        for line in iter(process_stdout.readline, ""):
             lines.append(line)
 
             if self.isCanceled():
@@ -386,7 +391,7 @@ class SlideruleInstallTask(QgsTask):
             if self._process is not None:
                 try:
                     self._process.terminate()
-                except Exception:
+                except Exception:  # nosec B110
                     pass
                 self._process = None
 
@@ -394,7 +399,7 @@ class SlideruleInstallTask(QgsTask):
         if self._process is not None:
             try:
                 self._process.terminate()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
         super().cancel()

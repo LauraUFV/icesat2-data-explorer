@@ -5,7 +5,7 @@ import json
 import os
 import shutil
 import sqlite3
-import subprocess
+import subprocess  # nosec B404
 import struct
 import sys
 import tempfile
@@ -31,7 +31,7 @@ MODEL_DISTRIBUTION = "GOT4.10c"
 
 def support_root() -> Path:
     local_data = QStandardPaths.writableLocation(
-        QStandardPaths.AppLocalDataLocation
+        QStandardPaths.StandardLocation.AppLocalDataLocation
     )
 
     if not local_data:
@@ -156,7 +156,7 @@ def qgis_base_python() -> Path:
                     apps_directory / "bin" / "python",
                 ]
             )
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
     # sys.executable is only accepted when it really is a Python binary.
@@ -262,7 +262,7 @@ def probe_python_interpreter(
     environment["PYTHONNOUSERSITE"] = "1"
 
     try:
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603
             [
                 str(candidate),
                 "-c",
@@ -407,6 +407,18 @@ def quote_identifier(value: str) -> str:
         + str(value).replace('"', '""')
         + '"'
     )
+
+
+def identifier_sql(
+    template: str,
+    **identifiers: str,
+) -> str:
+    """Insert only SQLite-quoted identifiers into an internal SQL template."""
+    quoted = {
+        name: quote_identifier(value)
+        for name, value in identifiers.items()
+    }
+    return template.format(**quoted)
 
 
 def _gpkg_geometry_bounds(
@@ -795,7 +807,7 @@ class ExternalProcessTask(QgsTask):
     ):
         super().__init__(
             description,
-            QgsTask.CanCancel,
+            QgsTask.Flag.CanCancel,
         )
 
         self.error_message: str | None = None
@@ -818,7 +830,7 @@ class ExternalProcessTask(QgsTask):
             exist_ok=True,
         )
 
-        self.process = subprocess.Popen(
+        self.process = subprocess.Popen(  # nosec B603
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -837,9 +849,13 @@ class ExternalProcessTask(QgsTask):
         result: dict[str, Any] = {}
         engine_error: dict[str, Any] | None = None
 
-        assert self.process.stdout is not None
+        process_stdout = self.process.stdout
+        if process_stdout is None:
+            raise RuntimeError(
+                "The model tide process output stream is unavailable."
+            )
 
-        for line in self.process.stdout:
+        for line in process_stdout:
             self.console_lines.append(
                 line.rstrip()
             )
@@ -912,7 +928,7 @@ class ExternalProcessTask(QgsTask):
             except Exception:
                 try:
                     self.process.kill()
-                except Exception:
+                except Exception:  # nosec B110
                     pass
 
 
@@ -1271,12 +1287,16 @@ class ModelTideComputeTask(ExternalProcessTask):
                     connection
                 )
 
+                count_sql = identifier_sql(
+                    """
+                    SELECT COUNT(*)
+                    FROM {source_table}
+                    """,
+                    source_table=self.source_table,
+                )
                 self.total_records = int(
                     connection.execute(
-                        f"""
-                        SELECT COUNT(*)
-                        FROM {quote_identifier(self.source_table)}
-                        """
+                        count_sql
                     ).fetchone()[0]
                 )
 
@@ -1585,11 +1605,16 @@ class ModelTideComputeTask(ExternalProcessTask):
                 )
 
         for field in self.OUTPUT_FIELDS:
-            connection.execute(
-                f"""
-                UPDATE {quote_identifier(self.source_table)}
-                SET {quote_identifier(field)} = NULL
+            clear_sql = identifier_sql(
                 """
+                UPDATE {source_table}
+                SET {field} = NULL
+                """,
+                source_table=self.source_table,
+                field=field,
+            )
+            connection.execute(
+                clear_sql
             )
 
         connection.commit()
@@ -1602,16 +1627,24 @@ class ModelTideComputeTask(ExternalProcessTask):
     ) -> int:
         invalid = 0
 
-        cursor = connection.execute(
-            f"""
-            SELECT
-                {quote_identifier(primary_key)},
-                {quote_identifier("longitude")},
-                {quote_identifier("latitude")},
-                {quote_identifier("time_ns")}
-            FROM {quote_identifier(self.source_table)}
-            ORDER BY {quote_identifier(primary_key)}
+        select_sql = identifier_sql(
             """
+            SELECT
+                {primary_key},
+                {longitude},
+                {latitude},
+                {time_ns}
+            FROM {source_table}
+            ORDER BY {primary_key}
+            """,
+            primary_key=primary_key,
+            longitude="longitude",
+            latitude="latitude",
+            time_ns="time_ns",
+            source_table=self.source_table,
+        )
+        cursor = connection.execute(
+            select_sql
         )
 
         with input_csv.open(
@@ -1738,18 +1771,28 @@ class ModelTideComputeTask(ExternalProcessTask):
         primary_key: str,
         updates: list[tuple],
     ) -> None:
-        connection.executemany(
-            f"""
-            UPDATE {quote_identifier(self.source_table)}
+        update_sql = identifier_sql(
+            """
+            UPDATE {source_table}
             SET
-                {quote_identifier("tide_ocean_model_m")} = ?,
-                {quote_identifier("tide_time_utc")} = ?,
-                {quote_identifier("tide_valid")} = ?,
-                {quote_identifier("tide_model")} = ?,
-                {quote_identifier("tide_method")} = ?
+                {tide_ocean_model_m} = ?,
+                {tide_time_utc} = ?,
+                {tide_valid} = ?,
+                {tide_model} = ?,
+                {tide_method} = ?
             WHERE
-                {quote_identifier(primary_key)} = ?
+                {primary_key} = ?
             """,
+            source_table=self.source_table,
+            tide_ocean_model_m="tide_ocean_model_m",
+            tide_time_utc="tide_time_utc",
+            tide_valid="tide_valid",
+            tide_model="tide_model",
+            tide_method="tide_method",
+            primary_key=primary_key,
+        )
+        connection.executemany(
+            update_sql,
             updates,
         )
 
@@ -1772,49 +1815,62 @@ class ModelTideComputeTask(ExternalProcessTask):
         transformation. A NULL result is retained when depth or model tide is
         unavailable.
         """
-        connection.execute(
-            f"""
-            UPDATE {quote_identifier(self.source_table)}
+        depth_sql = identifier_sql(
+            """
+            UPDATE {source_table}
             SET
-                {quote_identifier("depth_tide_corrected_m")} =
+                {depth_tide_corrected_m} =
                     CASE
                         WHEN
-                            {quote_identifier("tide_valid")} = 1
-                            AND {quote_identifier("depth")} IS NOT NULL
-                            AND {quote_identifier("tide_ocean_model_m")} IS NOT NULL
+                            {tide_valid} = 1
+                            AND {depth} IS NOT NULL
+                            AND {tide_ocean_model_m} IS NOT NULL
                         THEN
                             CAST(
-                                {quote_identifier("depth")}
+                                {depth}
                                 AS REAL
                             )
                             -
-                            {quote_identifier("tide_ocean_model_m")}
+                            {tide_ocean_model_m}
                         ELSE NULL
                     END
-            """
+            """,
+            source_table=self.source_table,
+            depth_tide_corrected_m="depth_tide_corrected_m",
+            tide_valid="tide_valid",
+            depth="depth",
+            tide_ocean_model_m="tide_ocean_model_m",
+        )
+        connection.execute(
+            depth_sql
         )
         connection.commit()
 
-        statistics = connection.execute(
-            f"""
+        statistics_sql = identifier_sql(
+            """
             SELECT
                 COUNT(
-                    {quote_identifier("depth_tide_corrected_m")}
+                    {depth_tide_corrected_m}
                 ),
                 MIN(
-                    {quote_identifier("depth_tide_corrected_m")}
+                    {depth_tide_corrected_m}
                 ),
                 MAX(
-                    {quote_identifier("depth_tide_corrected_m")}
+                    {depth_tide_corrected_m}
                 ),
                 AVG(
-                    {quote_identifier("depth_tide_corrected_m")}
+                    {depth_tide_corrected_m}
                 )
-            FROM {quote_identifier(self.source_table)}
+            FROM {source_table}
             WHERE
-                {quote_identifier("depth_tide_corrected_m")}
+                {depth_tide_corrected_m}
                 IS NOT NULL
-            """
+            """,
+            depth_tide_corrected_m="depth_tide_corrected_m",
+            source_table=self.source_table,
+        )
+        statistics = connection.execute(
+            statistics_sql
         ).fetchone()
 
         self.corrected_depth_records = int(

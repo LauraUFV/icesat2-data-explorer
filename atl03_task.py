@@ -19,6 +19,9 @@ from qgis.PyQt.QtCore import pyqtSignal
 from qgis.core import QgsTask
 
 
+ATL03_INVALID_EXTENTS_PARAMETER = "pass_invalid"
+
+
 class ATL03DownloadTask(QgsTask):
     progress_message = pyqtSignal(str)
 
@@ -94,7 +97,7 @@ class ATL03DownloadTask(QgsTask):
     ):
         super().__init__(
             "Download ATL03 photons",
-            QgsTask.CanCancel,
+            QgsTask.Flag.CanCancel,
         )
 
         self.parameters = parameters
@@ -284,7 +287,7 @@ class ATL03DownloadTask(QgsTask):
     def _emit_progress_message(self, message: str) -> None:
         try:
             self.progress_message.emit(str(message))
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     @staticmethod
@@ -675,7 +678,7 @@ class ATL03DownloadTask(QgsTask):
                     "srt": surface_code,
                     "cnf": -2,
                     "quality_ph": [0, 1, 2, 3],
-                    "pass_invalid": True,
+                    ATL03_INVALID_EXTENTS_PARAMETER: True,
                     "granule": {"version": "007"},
                 }
                 chunks = self._request_resource_resilient(

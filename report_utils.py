@@ -32,12 +32,12 @@ def _json_default(value: Any) -> Any:
     if hasattr(value, "isoformat"):
         try:
             return value.isoformat()
-        except Exception:
+        except Exception:  # nosec B110
             pass
     if hasattr(value, "item"):
         try:
             return value.item()
-        except Exception:
+        except Exception:  # nosec B110
             pass
     return str(value)
 

@@ -2,7 +2,7 @@
 
 **QGIS plugin for direct access, inspection and analysis of ICESat-2 ATL03, ATL08, ATL13 and ATL24 products.**
 
-Version: **0.10.0**  
+Version: **0.10.1**  
 License: **GPL-2.0-or-later**  
 Status: **Experimental**  
 Minimum QGIS version: **3.44** (maximum 3.99)
@@ -70,4 +70,3 @@ A GEOINFO 2026 tools paper is being prepared. Until publication, cite the softwa
 - [PDF User Manual](docs/ICESat2_Data_Explorer_User_Manual_v0.10.0.pdf)
 
 The User Guide covers installation, ATL03/ATL08/ATL13/ATL24 acquisition, interactive profile tools, model tide processing, reports, and troubleshooting.
-

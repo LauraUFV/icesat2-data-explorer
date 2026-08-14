@@ -103,7 +103,7 @@ def _draw_attribution(
 
     try:
         painter.setRenderHint(
-            QPainter.TextAntialiasing,
+            QPainter.RenderHint.TextAntialiasing,
             True,
         )
         font = QFont()
@@ -179,7 +179,7 @@ def _image_data_uri(
         byte_array
     )
     buffer.open(
-        QIODevice.WriteOnly
+        QIODevice.OpenModeFlag.WriteOnly
     )
 
     try:

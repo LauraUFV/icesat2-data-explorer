@@ -159,7 +159,7 @@ def create_dialog_header(
     image = QLabel()
     image.setPixmap(icon(icon_name).pixmap(QSize(46, 46)))
     image.setFixedSize(48, 48)
-    image.setAlignment(Qt.AlignCenter)
+    image.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(image)
 
     text_layout = QVBoxLayout()
@@ -179,7 +179,10 @@ def create_dialog_header(
     if version:
         version_label = QLabel(version)
         version_label.setProperty("muted", True)
-        version_label.setAlignment(Qt.AlignRight | Qt.AlignTop)
+        version_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight
+            | Qt.AlignmentFlag.AlignTop
+        )
         layout.addWidget(version_label)
 
     return frame

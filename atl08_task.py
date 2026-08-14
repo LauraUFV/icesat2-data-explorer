@@ -31,7 +31,7 @@ class ATL08DownloadTask(QgsTask):
     ):
         super().__init__(
             "Download ATL08 segments",
-            QgsTask.CanCancel,
+            QgsTask.Flag.CanCancel,
         )
 
         self.parameters = parameters
