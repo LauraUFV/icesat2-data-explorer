@@ -291,10 +291,35 @@ class ATL03DownloadTask(QgsTask):
             pass
 
     @staticmethod
+    def _fresh_sliderule_parameters(
+        parameters: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return an isolated parameter set for one SlideRule attempt.
+
+        ``sliderule.run`` adds its Arrow output path and resource list to the
+        supplied dictionary. Reusing that mutated dictionary can make a retry
+        target the temporary file that is still owned by the previous transfer.
+        """
+        request_parameters = copy.deepcopy(parameters)
+        request_parameters.pop("output", None)
+        request_parameters.pop("resources", None)
+        return request_parameters
+
+    @staticmethod
+    def _is_arrow_transfer_collision(error: Exception) -> bool:
+        text = f"{type(error).__name__}: {error}".lower()
+        return (
+            "file transfer already in progress" in text
+            or "failed to process arrow file" in text
+        )
+
+    @staticmethod
     def _is_transient_sliderule_error(error: Exception) -> bool:
         text = f"{type(error).__name__}: {error}".lower()
         transient_markers = (
             "unexpected termination of response",
+            "file transfer already in progress",
+            "failed to process arrow file",
             "timeout",
             "timed out",
             "connection",
@@ -454,9 +479,12 @@ class ATL03DownloadTask(QgsTask):
             )
             self.request_attempts.append(attempt_label)
             try:
+                request_parameters = self._fresh_sliderule_parameters(
+                    parameters
+                )
                 result = sliderule.run(
                     "atl03x",
-                    parameters,
+                    request_parameters,
                     resources=[resource],
                 )
                 return self._coerce_result(result)
@@ -467,13 +495,29 @@ class ATL03DownloadTask(QgsTask):
                     and self._is_transient_sliderule_error(error)
                 ):
                     self.retry_count += 1
-                    self._emit_progress_message(
-                        "SlideRule response was interrupted for "
-                        f"{resource}"
-                        + (f" / {beam}" if beam else "")
-                        + ". Retrying..."
-                    )
-                    time.sleep(self.REQUEST_RETRY_DELAY_SECONDS * attempt)
+                    if self._is_arrow_transfer_collision(error):
+                        self._emit_progress_message(
+                            "The previous SlideRule Arrow transfer is still "
+                            "releasing its temporary file for "
+                            f"{resource}"
+                            + (f" / {beam}" if beam else "")
+                            + ". Retrying with a new temporary file..."
+                        )
+                        retry_delay = max(
+                            3.0,
+                            self.REQUEST_RETRY_DELAY_SECONDS * attempt,
+                        )
+                    else:
+                        self._emit_progress_message(
+                            "SlideRule response was interrupted for "
+                            f"{resource}"
+                            + (f" / {beam}" if beam else "")
+                            + ". Retrying..."
+                        )
+                        retry_delay = (
+                            self.REQUEST_RETRY_DELAY_SECONDS * attempt
+                        )
+                    time.sleep(retry_delay)
                     continue
                 raise
         if last_error is not None:

@@ -345,7 +345,7 @@ ATL24_FIELDS: dict[str, dict[str, str]] = {
     "class_ph": {
         "description": "ATL24 photon-classification code.",
         "units": "code",
-        "notes": "Typical values: 40=bathymetry; 41=sea surface; 0=unclassified.",
+        "notes": "Documented values include 0=unclassified; 1=other; 40=bathymetry; 41=sea surface.",
     },
     "class_name": {
         "description": "Readable label derived from the ATL24 photon-classification code.",
@@ -355,12 +355,12 @@ ATL24_FIELDS: dict[str, dict[str, str]] = {
     "confidence": {
         "description": "ATL24 bathymetry-classification confidence score.",
         "units": "0–1",
-        "notes": "Higher values indicate greater confidence.",
+        "notes": "ATL24 ensemble confidence; higher values indicate greater confidence. This is distinct from the native ATL03 signal_conf_ph classification.",
     },
     "low_confidence_flag": {
         "description": "Flag indicating a low-confidence ATL24 bathymetry classification.",
         "units": "0/1",
-        "notes": "Interpret together with confidence and the request filters.",
+        "notes": "ATL24 field derived from its bathymetry confidence (flagged when confidence is below 0.6 in the SlideRule ATL24 definition). It is not the ATL03 signal_conf_ph field.",
     },
     "sensor_depth_exceeded": {
         "description": "Flag indicating that the estimated depth exceeded the sensor/model processing limit.",
@@ -465,6 +465,7 @@ VALUE_LABELS: dict[tuple[str, str], dict[Any, str]] = {
     },
     ("ATL03", "atl24_class"): {
         0: "unclassified",
+        1: "other",
         40: "bathymetry",
         41: "sea surface",
     },

@@ -1,0 +1,230 @@
+
+@page {
+  size: A4;
+  margin: 1.6cm 1.5cm 1.8cm 1.5cm;
+  @bottom-left {
+    content: "ICESat-2 Data Explorer — User Manual";
+    color: #667785;
+    font-size: 8pt;
+  }
+  @bottom-right {
+    content: "v0.10.3  |  Page " counter(page) " of " counter(pages);
+    color: #667785;
+    font-size: 8pt;
+  }
+}
+
+body {
+  font-family: "DejaVu Sans", Arial, sans-serif;
+  color: #1f2d3d;
+  line-height: 1.45;
+  font-size: 10pt;
+}
+
+p, li { orphans: 3; widows: 3; }
+
+h1, h2, h3, h4 { color: #0f4c6a; }
+
+h1 {
+  font-size: 22pt;
+  margin: 0 0 0.4cm 0;
+  padding-bottom: 0.15cm;
+  border-bottom: 3px solid #4bb3c1;
+}
+
+h2 {
+  font-size: 15pt;
+  margin-top: 0.65cm;
+  margin-bottom: 0.2cm;
+  padding: 0.18cm 0.28cm;
+  background: #eef7fa;
+  border-left: 5px solid #2f90b0;
+  border-radius: 8px;
+  page-break-after: avoid;
+}
+
+h3 {
+  font-size: 12.5pt;
+  margin-top: 0.5cm;
+  margin-bottom: 0.15cm;
+  color: #125b7a;
+  page-break-after: avoid;
+}
+
+h4 {
+  font-size: 11pt;
+  margin-top: 0.35cm;
+  margin-bottom: 0.12cm;
+  color: #18738c;
+  page-break-after: avoid;
+}
+
+a { color: #0b6a88; text-decoration: none; }
+strong { color: #173b55; }
+code {
+  background: #f3f6f8;
+  border: 1px solid #dfe8ee;
+  border-radius: 4px;
+  padding: 0.02cm 0.08cm;
+  font-size: 92%;
+}
+
+blockquote {
+  margin: 0.35cm 0 0.45cm 0;
+  padding: 0.28cm 0.35cm;
+  background: linear-gradient(135deg, #f4fbfb 0%, #eef7fa 100%);
+  border-left: 6px solid #37a49b;
+  border-radius: 10px;
+  color: #203649;
+}
+blockquote p { margin: 0.08cm 0; }
+
+ul, ol { padding-left: 1.2em; }
+li { margin: 0.08cm 0; }
+
+hr {
+  border: none;
+  border-top: 1px solid #d6e1e8;
+  margin: 0.5cm 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.25cm 0 0.5cm 0;
+  font-size: 9.2pt;
+  page-break-inside: avoid;
+}
+
+thead th {
+  background: #156b8a;
+  color: white;
+  font-weight: 700;
+  padding: 0.18cm 0.18cm;
+  border: 1px solid #d7e5eb;
+}
+
+tbody td {
+  border: 1px solid #d7e5eb;
+  padding: 0.16cm 0.18cm;
+  vertical-align: top;
+}
+
+tbody tr:nth-child(even) td { background: #f7fbfd; }
+
+figure {
+  margin: 0.35cm auto 0.55cm auto;
+  page-break-inside: avoid;
+  text-align: center;
+  border: 1px solid #d8e4ea;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.22cm;
+  box-shadow: 0 1px 4px rgba(60, 85, 100, 0.08);
+}
+figure img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+figcaption {
+  font-size: 8.6pt;
+  color: #637788;
+  margin-top: 0.16cm;
+  font-style: italic;
+}
+
+#TOC {
+  background: #f8fbfd;
+  border: 1px solid #dde8ee;
+  border-radius: 12px;
+  padding: 0.25cm 0.35cm;
+  margin-bottom: 0.6cm;
+}
+#TOC ul { list-style-type: none; padding-left: 0; }
+#TOC ul ul { padding-left: 0.5cm; }
+#TOC li { margin: 0.08cm 0; }
+#TOC a { color: #234b63; }
+
+.cover-page {
+  page-break-after: always;
+  min-height: 24cm;
+  display: block;
+}
+.cover-hero {
+  background: linear-gradient(135deg, #0f4c6a 0%, #1a7da1 58%, #49b98f 100%);
+  color: white;
+  border-radius: 18px;
+  padding: 1cm 0.9cm 0.9cm 0.9cm;
+  box-shadow: 0 8px 22px rgba(16, 65, 88, 0.18);
+}
+.cover-header {
+  display: table;
+  width: 100%;
+}
+.cover-logo, .cover-title-block {
+  display: table-cell;
+  vertical-align: middle;
+}
+.cover-logo { width: 2.3cm; }
+.cover-logo img {
+  width: 1.9cm;
+  height: auto;
+  background: rgba(255,255,255,0.14);
+  border-radius: 14px;
+  padding: 0.18cm;
+}
+.cover-title-block h1 {
+  color: white;
+  border: none;
+  margin: 0;
+  padding: 0;
+  font-size: 24pt;
+}
+.cover-subtitle {
+  font-size: 13pt;
+  color: rgba(255,255,255,0.92);
+  margin-top: 0.12cm;
+}
+.cover-meta {
+  margin-top: 0.45cm;
+  font-size: 10.5pt;
+  color: rgba(255,255,255,0.95);
+}
+.cover-grid {
+  margin-top: 0.65cm;
+  display: table;
+  width: 100%;
+  border-spacing: 0.22cm;
+}
+.cover-card {
+  display: table-cell;
+  width: 33%;
+  background: #ffffff;
+  color: #244056;
+  border-radius: 14px;
+  padding: 0.35cm 0.35cm;
+  border: 1px solid #dbe7ec;
+  box-shadow: 0 2px 7px rgba(50, 75, 90, 0.06);
+}
+.cover-card h3 {
+  margin: 0 0 0.12cm 0;
+  font-size: 11pt;
+  color: #0f4c6a;
+}
+.cover-card p {
+  margin: 0;
+  font-size: 9.3pt;
+  line-height: 1.35;
+}
+.cover-notes {
+  margin-top: 0.55cm;
+  background: #f6fbfd;
+  border: 1px solid #dbe7ec;
+  border-radius: 14px;
+  padding: 0.38cm 0.42cm;
+}
+.cover-notes h3 { margin-top: 0; }
+.smallcaps { letter-spacing: 0.06em; text-transform: uppercase; font-size: 8.3pt; color: #e8f5fb; }
+
+.pagebreak { page-break-after: always; }

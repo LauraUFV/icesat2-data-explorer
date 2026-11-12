@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 import traceback
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,13 @@ class ATL24DownloadTask(QgsTask):
     such as index_ph are retained when requested by the plugin.
     """
 
+    RESOURCE_BATCH_SIZE = 250
+    REQUEST_MAX_RETRIES = 2
+    RETRY_BASE_DELAY_SECONDS = 1.5
+    MIN_RECOVERY_BATCH_SIZE = 25
+    BATHYMETRY_CLASS_CODE = 40
+    ALL_CLASS_CODES = [0, 1, 40, 41]
+
     def __init__(
         self,
         parameters: dict[str, Any],
@@ -29,7 +37,7 @@ class ATL24DownloadTask(QgsTask):
         layer_name: str,
     ):
         super().__init__(
-            "Download ATL24 bathymetry",
+            "Download ATL24 data",
             QgsTask.Flag.CanCancel,
         )
 
@@ -149,19 +157,102 @@ class ATL24DownloadTask(QgsTask):
         self,
         parameters: dict[str, Any],
         variant: str,
+        resources: list[str] | None = None,
     ) -> gpd.GeoDataFrame:
-        self.request_attempts.append(
-            variant
+        for retry_index in range(
+            self.REQUEST_MAX_RETRIES + 1
+        ):
+            attempt_label = variant
+            if retry_index:
+                attempt_label += (
+                    "_retry_"
+                    + str(retry_index)
+                )
+
+            self.request_attempts.append(
+                attempt_label
+            )
+
+            try:
+                result = sliderule.run(
+                    "atl24x",
+                    copy.deepcopy(parameters),
+                    resources=resources,
+                )
+
+                return self._coerce_result(
+                    result
+                )
+            except Exception as error:
+                if (
+                    not self._is_transient_request_error(error)
+                    or retry_index >= self.REQUEST_MAX_RETRIES
+                ):
+                    raise
+
+                delay = (
+                    self.RETRY_BASE_DELAY_SECONDS
+                    * (2**retry_index)
+                )
+                self.request_attempts.append(
+                    attempt_label
+                    + "_waiting_"
+                    + f"{delay:g}s"
+                )
+
+                if not self._wait_for_retry(delay):
+                    return gpd.GeoDataFrame()
+
+        return gpd.GeoDataFrame()
+
+    @staticmethod
+    def _is_transient_request_error(
+        error: Exception,
+    ) -> bool:
+        """Return whether a failed SlideRule response is safe to retry."""
+        message = str(error).lower()
+        transient_markers = (
+            "unexpected termination of response",
+            "connection reset",
+            "connection aborted",
+            "connection broken",
+            "remote end closed connection",
+            "timed out",
+            "timeout",
+            "temporarily unavailable",
+            "502 bad gateway",
+            "503 service unavailable",
+            "504 gateway timeout",
+        )
+        return any(
+            marker in message
+            for marker in transient_markers
         )
 
-        result = sliderule.run(
-            "atl24x",
-            parameters,
+    def _wait_for_retry(
+        self,
+        seconds: float,
+    ) -> bool:
+        """Wait in short, cancellable intervals before a retry."""
+        deadline = time.monotonic() + max(
+            0.0,
+            seconds,
         )
 
-        return self._coerce_result(
-            result
-        )
+        while True:
+            if self.isCanceled():
+                return False
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                return True
+
+            time.sleep(
+                min(
+                    0.25,
+                    remaining,
+                )
+            )
 
     @staticmethod
     def _class_code_series(
@@ -182,6 +273,7 @@ class ATL24DownloadTask(QgsTask):
 
         text_mapping = {
             "unclassified": 0,
+            "other": 1,
             "bathymetry": 40,
             "sea_surface": 41,
             "sea surface": 41,
@@ -206,6 +298,35 @@ class ATL24DownloadTask(QgsTask):
         return numeric
 
     @classmethod
+    def _requested_class_codes(
+        cls,
+        atl24_parameters: dict[str, Any],
+    ) -> list[int]:
+        raw_codes = atl24_parameters.get("class_ph")
+
+        if isinstance(raw_codes, (list, tuple, set)):
+            codes: list[int] = []
+            for value in raw_codes:
+                try:
+                    codes.append(int(value))
+                except (TypeError, ValueError):
+                    continue
+
+            if codes:
+                return codes
+
+        return list(cls.ALL_CLASS_CODES)
+
+    @classmethod
+    def _requested_bathymetry_only(
+        cls,
+        atl24_parameters: dict[str, Any],
+    ) -> bool:
+        return set(
+            cls._requested_class_codes(atl24_parameters)
+        ) == {cls.BATHYMETRY_CLASS_CODE}
+
+    @classmethod
     def _class_counts(
         cls,
         result: gpd.GeoDataFrame,
@@ -217,6 +338,9 @@ class ATL24DownloadTask(QgsTask):
         return {
             "unclassified": int(
                 (codes == 0).sum()
+            ),
+            "other": int(
+                (codes == 1).sum()
             ),
             "bathymetry": int(
                 (codes == 40).sum()
@@ -230,7 +354,7 @@ class ATL24DownloadTask(QgsTask):
         }
 
     @classmethod
-    def _client_filter_bathymetry(
+    def _client_filter_requested_classes(
         cls,
         result: gpd.GeoDataFrame,
         atl24_parameters: dict[str, Any],
@@ -238,12 +362,21 @@ class ATL24DownloadTask(QgsTask):
         if result.empty:
             return result
 
-        mask = (
-            cls._class_code_series(
-                result
+        if "class_ph" in result.columns:
+            requested_codes = cls._requested_class_codes(
+                atl24_parameters
             )
-            == 40
-        )
+            mask = cls._class_code_series(result).isin(
+                requested_codes
+            )
+        else:
+            # A response without class_ph cannot be narrowed to class 40
+            # safely. Preserve records in the all-classes mode.
+            mask = pd.Series(
+                not cls._requested_bathymetry_only(atl24_parameters),
+                index=result.index,
+                dtype="bool",
+            )
 
         confidence_threshold = float(
             atl24_parameters.get(
@@ -319,6 +452,323 @@ class ATL24DownloadTask(QgsTask):
 
         return request
 
+    def _discover_current_release_resources(
+        self,
+        parameters: dict[str, Any],
+    ) -> list[str]:
+        """Return ATL24 V2 granules without triggering the 300-file limit."""
+        query = {}
+
+        for field_name in (
+            "poly",
+            "t0",
+            "t1",
+        ):
+            if field_name in parameters:
+                query[field_name] = copy.deepcopy(
+                    parameters[field_name]
+                )
+
+        try:
+            response = sliderule.source(
+                "ams/ATL24",
+                query,
+                rethrow=True,
+            )
+        except Exception as error:
+            raise RuntimeError(
+                "SlideRule could not list ATL24 Version 2 granules for "
+                "automatic batching. Retry later or use a shorter date "
+                "range."
+            ) from error
+
+        if not isinstance(response, dict):
+            raise RuntimeError(
+                "SlideRule returned an invalid ATL24 resource-discovery "
+                "response. Retry later or use a shorter date range."
+            )
+
+        granules = response.get(
+            "granules",
+            [],
+        )
+
+        if not isinstance(granules, list):
+            raise RuntimeError(
+                "SlideRule returned an invalid ATL24 granule list. Retry "
+                "later or use a shorter date range."
+            )
+
+        resources: list[str] = []
+        seen: set[str] = set()
+
+        for granule in granules:
+            if not isinstance(granule, str):
+                continue
+
+            resource = granule.strip()
+
+            if not resource or resource in seen:
+                continue
+
+            seen.add(resource)
+            resources.append(resource)
+
+        self.request_attempts.append(
+            "release_002_ams_discovery_"
+            + str(len(resources))
+            + "_resources"
+        )
+
+        return resources
+
+    @classmethod
+    def _resource_batches(
+        cls,
+        resources: list[str],
+    ) -> list[list[str]]:
+        return [
+            resources[start : start + cls.RESOURCE_BATCH_SIZE]
+            for start in range(
+                0,
+                len(resources),
+                cls.RESOURCE_BATCH_SIZE,
+            )
+        ]
+
+    @staticmethod
+    def _combine_results(
+        results: list[gpd.GeoDataFrame],
+    ) -> gpd.GeoDataFrame:
+        nonempty = [
+            result
+            for result in results
+            if not result.empty
+        ]
+
+        if not nonempty:
+            return gpd.GeoDataFrame()
+
+        combined = pd.concat(
+            nonempty,
+            axis=0,
+            copy=False,
+        )
+
+        if isinstance(
+            combined,
+            gpd.GeoDataFrame,
+        ):
+            return combined
+
+        first = nonempty[0]
+        geometry_name = first.geometry.name
+
+        return gpd.GeoDataFrame(
+            combined,
+            geometry=geometry_name,
+            crs=first.crs,
+        )
+
+    def _recover_resource_batch(
+        self,
+        primary: dict[str, Any],
+        compatibility: dict[str, Any],
+        batch: list[str],
+        batch_label: str,
+        error: Exception,
+    ) -> tuple[gpd.GeoDataFrame, bool]:
+        """Retry an interrupted response using smaller resource batches."""
+        if (
+            not self._is_transient_request_error(error)
+            or len(batch) <= self.MIN_RECOVERY_BATCH_SIZE
+        ):
+            raise error
+
+        midpoint = len(batch) // 2
+        if midpoint <= 0 or midpoint >= len(batch):
+            raise error
+
+        left_batch = batch[:midpoint]
+        right_batch = batch[midpoint:]
+        self.request_attempts.append(
+            "release_002_resource_batch_"
+            + batch_label
+            + "_split_"
+            + str(len(batch))
+            + "_into_"
+            + str(len(left_batch))
+            + "_and_"
+            + str(len(right_batch))
+            + "_resources"
+        )
+
+        left_result, left_compatibility = (
+            self._download_resource_batch_with_recovery(
+                primary,
+                compatibility,
+                left_batch,
+                batch_label + "_left",
+            )
+        )
+
+        if self.isCanceled():
+            return gpd.GeoDataFrame(), False
+
+        right_result, right_compatibility = (
+            self._download_resource_batch_with_recovery(
+                primary,
+                compatibility,
+                right_batch,
+                batch_label + "_right",
+            )
+        )
+
+        return (
+            self._combine_results(
+                [
+                    left_result,
+                    right_result,
+                ]
+            ),
+            left_compatibility or right_compatibility,
+        )
+
+    def _download_resource_batch_with_recovery(
+        self,
+        primary: dict[str, Any],
+        compatibility: dict[str, Any],
+        batch: list[str],
+        batch_label: str,
+    ) -> tuple[gpd.GeoDataFrame, bool]:
+        try:
+            result = self._run_atl24_request(
+                primary,
+                "release_002_resource_batch_"
+                + batch_label
+                + "_numeric_class",
+                resources=batch,
+            )
+        except Exception as error:
+            return self._recover_resource_batch(
+                primary,
+                compatibility,
+                batch,
+                batch_label,
+                error,
+            )
+
+        if not result.empty:
+            return result, False
+
+        try:
+            compatibility_result = self._run_atl24_request(
+                compatibility,
+                "release_002_resource_batch_"
+                + batch_label
+                + "_string_class_compatibility",
+                resources=batch,
+            )
+        except Exception as error:
+            return self._recover_resource_batch(
+                primary,
+                compatibility,
+                batch,
+                batch_label,
+                error,
+            )
+
+        return compatibility_result, True
+
+    def _download_resource_batches(
+        self,
+        primary: dict[str, Any],
+        compatibility: dict[str, Any],
+        resources: list[str],
+    ) -> tuple[gpd.GeoDataFrame, bool]:
+        batches = self._resource_batches(
+            resources
+        )
+        results: list[gpd.GeoDataFrame] = []
+        compatibility_used = False
+
+        for batch_index, batch in enumerate(
+            batches,
+            start=1,
+        ):
+            if self.isCanceled():
+                break
+
+            batch_label = (
+                str(batch_index)
+                + "_of_"
+                + str(len(batches))
+            )
+            result, used_compatibility = (
+                self._download_resource_batch_with_recovery(
+                    primary,
+                    compatibility,
+                    batch,
+                    batch_label,
+                )
+            )
+
+            compatibility_used = (
+                compatibility_used
+                or used_compatibility
+            )
+
+            if self.isCanceled():
+                break
+
+            if not result.empty:
+                results.append(result)
+
+            self.setProgress(
+                min(
+                    60,
+                    int(
+                        15
+                        + (
+                            45
+                            * batch_index
+                            / len(batches)
+                        )
+                    ),
+                )
+            )
+
+        return (
+            self._combine_results(results),
+            compatibility_used,
+        )
+
+    @staticmethod
+    def _has_active_quality_filters(
+        atl24_parameters: dict[str, Any],
+    ) -> bool:
+        confidence_threshold = float(
+            atl24_parameters.get(
+                "confidence_threshold",
+                0.0,
+            )
+            or 0.0
+        )
+
+        if confidence_threshold > 0.0:
+            return True
+
+        return any(
+            atl24_parameters.get(parameter_name)
+            == "off"
+            for parameter_name in (
+                "low_confidence",
+                "sensor_depth_exceeded",
+                "invalid_kd",
+                "invalid_wind_speed",
+            )
+        )
+
     def _broad_release_request(
         self,
         original: dict[str, Any],
@@ -331,11 +781,7 @@ class ATL24DownloadTask(QgsTask):
         )
         broad["atl24"] = {
             "compact": False,
-            "class_ph": [
-                0,
-                40,
-                41,
-            ],
+            "class_ph": list(self.ALL_CLASS_CODES),
             "confidence_threshold": 0.0,
         }
 
@@ -350,12 +796,11 @@ class ATL24DownloadTask(QgsTask):
         """
         Download ATL24 while handling current and historical parameter syntax.
 
-        The routine first uses Version 2/current numeric class codes and
-        top-level anc_fields. It then tests the historical string class label
-        and nested ancillary-field placement. A broad class request determines
-        whether granules intersect the AOI but contain no bathymetry after the
-        selected filters. Finally, the alternate ATL24 release is checked for
-        comparison.
+        Version 2 granules are discovered first and processed in bounded
+        resource batches, avoiding SlideRule's 300-resource request limit.
+        Each batch first uses current numeric class codes and then the legacy
+        string syntax when needed. Version 1 retains the historical diagnostic
+        path, including broad-class and alternate-release comparisons.
         """
         original = copy.deepcopy(
             self.parameters
@@ -366,6 +811,12 @@ class ATL24DownloadTask(QgsTask):
                 "atl24",
                 {},
             )
+        )
+        requested_class_codes = self._requested_class_codes(
+            requested_atl24
+        )
+        bathymetry_only = self._requested_bathymetry_only(
+            requested_atl24
         )
 
         primary = copy.deepcopy(
@@ -384,26 +835,7 @@ class ATL24DownloadTask(QgsTask):
         )
         primary["atl24"][
             "class_ph"
-        ] = [
-            40,
-        ]
-
-        primary_result = self._run_atl24_request(
-            primary,
-            (
-                "release_"
-                + release
-                + "_numeric_class_top_level_ancillary"
-            ),
-        )
-
-        if not primary_result.empty:
-            self.request_variant = (
-                "numeric_class_top_level_ancillary"
-            )
-            self.effective_parameters = primary
-            self.parameters = primary
-            return primary_result
+        ] = requested_class_codes
 
         compatibility = copy.deepcopy(
             original
@@ -429,12 +861,98 @@ class ATL24DownloadTask(QgsTask):
         )
         compatibility["atl24"][
             "class_ph"
-        ] = [
-            "bathymetry",
-        ]
+        ] = (
+            ["bathymetry"]
+            if bathymetry_only
+            else [
+                "unclassified",
+                "other",
+                "bathymetry",
+                "sea_surface",
+            ]
+        )
         compatibility["atl24"][
             "anc_fields"
         ] = ancillary_fields
+
+        if release == "002":
+            resources = self._discover_current_release_resources(
+                original
+            )
+
+            if resources:
+                (
+                    batched_result,
+                    compatibility_used,
+                ) = self._download_resource_batches(
+                    primary,
+                    compatibility,
+                    resources,
+                )
+
+                if self.isCanceled():
+                    return gpd.GeoDataFrame()
+
+                if not batched_result.empty:
+                    if compatibility_used:
+                        self.request_variant = (
+                            "resource_batched_with_compatibility"
+                        )
+                    else:
+                        self.request_variant = (
+                            "resource_batched_numeric_class"
+                        )
+
+                    self.effective_parameters = primary
+                    self.parameters = primary
+                    return batched_result
+
+                if self._has_active_quality_filters(
+                    requested_atl24
+                ):
+                    requested_scope = (
+                        "bathymetry photons"
+                        if bathymetry_only
+                        else "ATL24 records"
+                    )
+                    raise RuntimeError(
+                        "ATL24 Version 2 granules intersect the selected "
+                        "AOI and dates, but no "
+                        + requested_scope
+                        + " passed "
+                        "the active confidence/quality filters. Set "
+                        "Minimum confidence to 0 and uncheck all ATL24 "
+                        "exclusion options for the next test."
+                    )
+
+                requested_scope = (
+                    "bathymetry photons"
+                    if bathymetry_only
+                    else "ATL24 records"
+                )
+                raise RuntimeError(
+                    "ATL24 Version 2 granules intersect the selected AOI "
+                    "and dates, but no "
+                    + requested_scope
+                    + " were returned inside the exact polygon."
+                )
+
+        primary_result = self._run_atl24_request(
+            primary,
+            (
+                "release_"
+                + release
+                + "_numeric_class_top_level_ancillary"
+            ),
+        )
+
+        if not primary_result.empty:
+            self.request_variant = (
+                "numeric_class_top_level_ancillary"
+            )
+            self.effective_parameters = primary
+            self.parameters = primary
+            return primary_result
 
         compatibility_result = self._run_atl24_request(
             compatibility,
@@ -467,14 +985,14 @@ class ATL24DownloadTask(QgsTask):
             class_counts = self._class_counts(
                 broad_result
             )
-            locally_filtered = self._client_filter_bathymetry(
+            locally_filtered = self._client_filter_requested_classes(
                 broad_result,
                 requested_atl24,
             )
 
             if not locally_filtered.empty:
                 self.request_variant = (
-                    "all_classes_with_client_side_bathymetry_filter"
+                    "all_classes_with_client_side_class_and_quality_filter"
                 )
                 self.effective_parameters = self._common_request(
                     original,
@@ -484,11 +1002,7 @@ class ATL24DownloadTask(QgsTask):
                     "atl24"
                 ] = {
                     "compact": False,
-                    "class_ph": [
-                        0,
-                        40,
-                        41,
-                    ],
+                    "class_ph": list(self.ALL_CLASS_CODES),
                     "confidence_threshold": 0.0,
                 }
                 self.parameters = self.effective_parameters
@@ -496,14 +1010,42 @@ class ATL24DownloadTask(QgsTask):
 
             count_text = (
                 f"unclassified={class_counts['unclassified']:,}, "
+                f"other={class_counts['other']:,}, "
                 f"bathymetry={class_counts['bathymetry']:,}, "
                 f"sea_surface={class_counts['sea_surface']:,}, "
                 f"unknown={class_counts['unknown']:,}"
             )
 
-            if class_counts[
-                "bathymetry"
-            ] > 0:
+            if not bathymetry_only:
+                known_class_count = sum(
+                    class_counts[class_name]
+                    for class_name in (
+                        "unclassified",
+                        "other",
+                        "bathymetry",
+                        "sea_surface",
+                    )
+                )
+                if known_class_count > 0:
+                    raise RuntimeError(
+                        "ATL24 records intersect the selected AOI and "
+                        "dates, but the active confidence/quality filters "
+                        "removed all records from the selected classes "
+                        "(0, 1, 40 and 41). Broad class counts: "
+                        + count_text
+                        + ". Set Minimum confidence to 0 and uncheck all "
+                        "ATL24 exclusion options for the next test."
+                    )
+
+                raise RuntimeError(
+                    "ATL24 granules intersect the selected AOI and dates, "
+                    "but the selected release returned no recognized ATL24 "
+                    "classes (0, 1, 40 or 41). Broad class counts: "
+                    + count_text
+                    + "."
+                )
+
+            if class_counts["bathymetry"] > 0:
                 raise RuntimeError(
                     "ATL24 records intersect the selected AOI and dates, "
                     "but the active confidence/quality filters removed all "
@@ -538,12 +1080,10 @@ class ATL24DownloadTask(QgsTask):
         )
 
         if not alternate_result.empty:
-            alternate_counts = self._class_counts(
-                alternate_result
+            alternate_requested = self._client_filter_requested_classes(
+                alternate_result,
+                requested_atl24,
             )
-            alternate_bathymetry = alternate_counts[
-                "bathymetry"
-            ]
 
             alternate_label = (
                 "Version 1"
@@ -556,11 +1096,11 @@ class ATL24DownloadTask(QgsTask):
                 else "Version 1"
             )
 
-            if alternate_bathymetry > 0:
+            if not alternate_requested.empty:
                 raise RuntimeError(
                     f"No ATL24 {requested_label} records were returned, but "
-                    f"the {alternate_label} comparison found "
-                    f"{alternate_bathymetry:,} bathymetry photons. Select "
+                    f"the {alternate_label} comparison found records in the "
+                    "selected ATL24 class scope. Select "
                     f"{alternate_label} in ATL24 settings and run again. "
                     "Do not mix releases silently in the same analysis."
                 )
@@ -568,7 +1108,7 @@ class ATL24DownloadTask(QgsTask):
             raise RuntimeError(
                 f"No ATL24 {requested_label} records were returned. The "
                 f"{alternate_label} comparison found ATL24 records, but none "
-                "were classified as bathymetry."
+                "matched the selected class scope."
             )
 
         self.request_variant = (
@@ -654,6 +1194,7 @@ class ATL24DownloadTask(QgsTask):
         ):
             class_names = {
                 0: "unclassified",
+                1: "other",
                 40: "bathymetry",
                 41: "sea_surface",
             }

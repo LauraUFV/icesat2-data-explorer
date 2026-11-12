@@ -38,7 +38,7 @@ class ICESat2DataExplorerPlugin:
     Main QGIS plugin class.
     """
 
-    PLUGIN_VERSION = "0.10.1"
+    PLUGIN_VERSION = "0.10.3"
 
     ATL24_LAYER_NAME = "atl24_bathymetry"
     ATL08_LAYER_NAME = "atl08_segments"
@@ -93,6 +93,7 @@ class ICESat2DataExplorerPlugin:
         self.iface = iface
 
         self.action = None
+        self.hdf5_converter_action = None
         self.profile_action = None
         self.model_tide_action = None
         self.about_action = None
@@ -101,6 +102,7 @@ class ICESat2DataExplorerPlugin:
         self.plugin_menu = None
 
         self.dialog = None
+        self.hdf5_converter_dialog = None
         self.profile_dialog = None
         self.model_tide_dialog = None
         self.current_task = None
@@ -181,6 +183,13 @@ class ICESat2DataExplorerPlugin:
             "Download and prepare ATL03, ATL08, ATL13 and ATL24 data",
             "ICESat2DataExplorerAction",
         )
+        self.hdf5_converter_action = self._create_action(
+            "HDF5 Converter",
+            "converter.svg",
+            self.open_hdf5_converter_dialog,
+            "Convert local ATL03, ATL08, ATL13 or ATL24 HDF5 granules",
+            "ICESat2HDF5ConverterAction",
+        )
         self.profile_action = self._create_action(
             "Interactive Profile",
             "profile.svg",
@@ -205,6 +214,7 @@ class ICESat2DataExplorerPlugin:
 
         for action in (
             self.action,
+            self.hdf5_converter_action,
             self.profile_action,
             self.model_tide_action,
         ):
@@ -226,6 +236,20 @@ class ICESat2DataExplorerPlugin:
                     "environment may not provide a usable SSL module."
                 ),
             )
+
+    def open_hdf5_converter_dialog(self) -> None:
+        # Lazy import keeps HDF5 and table libraries out of QGIS startup.
+        from .hdf5_converter_dialog import HDF5ConverterDialog
+
+        if self.hdf5_converter_dialog is None:
+            self.hdf5_converter_dialog = HDF5ConverterDialog(
+                iface=self.iface,
+                parent=self.iface.mainWindow(),
+            )
+
+        self.hdf5_converter_dialog.show()
+        self.hdf5_converter_dialog.raise_()
+        self.hdf5_converter_dialog.activateWindow()
 
     def open_profile_dialog(self) -> None:
         # Lazy import keeps Matplotlib out of QGIS startup.
@@ -267,13 +291,10 @@ class ICESat2DataExplorerPlugin:
             (
                 "<h2>ICESat-2 Data Explorer</h2>"
                 f"<p><b>Version {self.PLUGIN_VERSION}</b></p>"
-                "<p>Download and analyze ATL03, ATL08, ATL13 and ATL24 "
-                "products, create interactive profiles and associate "
-                "GOT4.10c model tide values in QGIS.</p>"
-                "<p><b>Compatibility</b><br>"
-                "QGIS 3.44 or later is required. QGIS 3.44 LTR is "
-                "the recommended and tested environment. Automatic "
-                "SlideRule setup is not supported on QGIS 3.30.</p>"
+                "<p>Download or convert ATL03, ATL08, ATL13 and ATL24 "
+                "data, inspect profiles and optionally add GOT4.10c "
+                "model tide values.</p>"
+                "<p>Requires QGIS 3.44 or later.</p>"
                 "<p><b>Laura Coelho de Andrade</b><br>"
                 "PhD Candidate<br>"
                 "Federal University of Viçosa (UFV), Brazil</p>"
@@ -292,12 +313,17 @@ class ICESat2DataExplorerPlugin:
 
         for dialog_name in (
             "dialog",
+            "hdf5_converter_dialog",
             "profile_dialog",
             "model_tide_dialog",
         ):
             dialog = getattr(self, dialog_name, None)
             if dialog is not None:
-                dialog.close()
+                if dialog_name == "hdf5_converter_dialog":
+                    dialog.shutdown()
+                    dialog.deleteLater()
+                else:
+                    dialog.close()
                 setattr(self, dialog_name, None)
 
         if self.plugin_menu is not None:
@@ -316,6 +342,7 @@ class ICESat2DataExplorerPlugin:
 
         for action_name in (
             "action",
+            "hdf5_converter_action",
             "profile_action",
             "model_tide_action",
             "about_action",
@@ -914,13 +941,15 @@ class ICESat2DataExplorerPlugin:
 
         if not isinstance(layer, QgsVectorLayer):
             self.dialog.show_error(
-                "Select a polygon vector layer first."
+                "First activate a polygon vector layer in QGIS, select "
+                "exactly one polygon feature, and then click Use selected polygon."
             )
             return
 
         if layer.geometryType() != Qgis.GeometryType.Polygon:
             self.dialog.show_error(
-                "The active layer must be a polygon layer."
+                "The active QGIS layer must be a polygon layer. Activate a "
+                "polygon layer before using this option."
             )
             return
 
@@ -928,7 +957,8 @@ class ICESat2DataExplorerPlugin:
 
         if len(selected_features) != 1:
             self.dialog.show_error(
-                "Select exactly one polygon feature."
+                "Select exactly one polygon feature in the active layer, "
+                "then click Use selected polygon."
             )
             return
 
@@ -1043,7 +1073,7 @@ class ICESat2DataExplorerPlugin:
         self,
     ) -> dict[str, Any]:
         """
-        Build an ATL24 request using the current numeric class code.
+        Build an ATL24 request using the selected numeric class codes.
 
         The current SlideRule documentation defines class 40 as bathymetry.
         Ancillary beam fields are requested at the top level, as shown in the
@@ -1064,11 +1094,15 @@ class ICESat2DataExplorerPlugin:
             "index_ph",
         ]
 
+        class_codes = self.dialog.get_atl24_class_filter()
+        if not class_codes:
+            raise ValueError(
+                "Select at least one ATL24 photon class."
+            )
+
         atl24_parameters = {
             "compact": False,
-            "class_ph": [
-                40,
-            ],
+            "class_ph": class_codes,
             "confidence_threshold": minimum_confidence,
         }
 
@@ -1088,9 +1122,8 @@ class ICESat2DataExplorerPlugin:
 
         self.last_server_filters = {
             "granule.version": release,
-            "atl24.class_ph": [
-                40,
-            ],
+            "atl24.class_ph": class_codes,
+            "atl24.class_filter": class_codes,
             "atl24.confidence_threshold": minimum_confidence,
             "anc_fields": [
                 "index_ph",
@@ -1301,6 +1334,10 @@ class ICESat2DataExplorerPlugin:
                 "Select an output GeoPackage."
             )
             return
+
+        if not output_path.lower().endswith(".gpkg"):
+            output_path += ".gpkg"
+            self.dialog.output_path_edit.setText(output_path)
 
         try:
             self.validate_bounding_box(
@@ -2135,10 +2172,43 @@ class ICESat2DataExplorerPlugin:
             )
 
         QgsProject.instance().addMapLayer(layer)
-        self.iface.mapCanvas().setExtent(
-            layer.extent()
-        )
-        self.iface.mapCanvas().refresh()
+
+        canvas = self.iface.mapCanvas()
+        layer.updateExtents()
+        extent = layer.extent()
+
+        if not extent.isNull() and not extent.isEmpty():
+            canvas_crs = canvas.mapSettings().destinationCrs()
+            layer_crs = layer.crs()
+
+            if (
+                layer_crs.isValid()
+                and canvas_crs.isValid()
+                and layer_crs != canvas_crs
+            ):
+                try:
+                    transform = QgsCoordinateTransform(
+                        layer_crs,
+                        canvas_crs,
+                        QgsProject.instance(),
+                    )
+                    extent = transform.transformBoundingBox(extent)
+                except Exception:
+                    # Keep the valid layer loaded even if a project-specific
+                    # transform is unavailable; manual zoom remains possible.
+                    extent = layer.extent()
+
+            if not extent.isNull() and not extent.isEmpty():
+                padding = max(
+                    extent.width(),
+                    extent.height(),
+                ) * 0.05
+                extent.grow(
+                    padding if padding > 0 else 0.001
+                )
+                canvas.setExtent(extent)
+
+        canvas.refresh()
 
         return layer
 

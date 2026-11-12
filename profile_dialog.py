@@ -32,7 +32,8 @@ from qgis.core import (
 )
 
 from matplotlib.figure import Figure
-from matplotlib.widgets import RectangleSelector
+from matplotlib.path import Path as MatplotlibPath
+from matplotlib.widgets import LassoSelector, RectangleSelector
 
 from .field_definitions import get_field_definition
 from .ui_assets import (
@@ -76,7 +77,7 @@ class ICESat2ProfileDialog(QDialog):
         - Feature geometries are not read while building the graph.
         - NumPy arrays are used for filtering and selection.
         - The display is limited to a user-defined maximum.
-        - The full filtered dataset is preserved for rectangle selection.
+        - The full filtered dataset is preserved for rectangle/lasso selection.
     """
 
     ALL_VALUE = "<All>"
@@ -109,6 +110,7 @@ class ICESat2ProfileDialog(QDialog):
         self.scatter = None
         self.selected_scatter = None
         self.rectangle_selector = None
+        self.lasso_selector = None
 
         self.setWindowTitle("ICESat-2 Interactive Profile")
         self.setWindowIcon(icon("profile.svg"))
@@ -122,6 +124,15 @@ class ICESat2ProfileDialog(QDialog):
         self.track_combo = QComboBox()
         self.x_axis_combo = QComboBox()
         self.y_axis_combo = QComboBox()
+        self.selection_mode_combo = QComboBox()
+        self.selection_mode_combo.addItem(
+            "Rectangle",
+            "rectangle",
+        )
+        self.selection_mode_combo.addItem(
+            "Lasso",
+            "lasso",
+        )
 
         self.acquisition_date_label = QLabel("—")
         self.acquisition_date_label.setWordWrap(True)
@@ -223,6 +234,10 @@ class ICESat2ProfileDialog(QDialog):
         form.addRow("X axis:", self.x_axis_combo)
         form.addRow("Y axis:", self.y_axis_combo)
         form.addRow(
+            "Selection shape:",
+            self.selection_mode_combo,
+        )
+        form.addRow(
             "Maximum displayed:",
             self.maximum_points_spin,
         )
@@ -296,6 +311,9 @@ class ICESat2ProfileDialog(QDialog):
         )
         self.y_axis_combo.currentIndexChanged.connect(
             self._axis_changed
+        )
+        self.selection_mode_combo.currentIndexChanged.connect(
+            self._selection_mode_changed
         )
         self.maximum_points_spin.valueChanged.connect(
             self._mark_profile_stale
@@ -1427,19 +1445,91 @@ class ICESat2ProfileDialog(QDialog):
         self.display_x = self.full_x[display_indices]
         self.display_y = self.full_y[display_indices]
 
-    def _draw_profile(self) -> None:
-        self.axes.clear()
+    def _disconnect_profile_selectors(self) -> None:
+        for attribute_name in (
+            "rectangle_selector",
+            "lasso_selector",
+        ):
+            selector = getattr(
+                self,
+                attribute_name,
+                None,
+            )
 
-        if self.rectangle_selector is not None:
+            if selector is None:
+                continue
+
             try:
-                self.rectangle_selector.set_active(
-                    False
-                )
-                self.rectangle_selector.disconnect_events()
+                selector.set_active(False)
+                selector.disconnect_events()
             except Exception:  # nosec B110
                 pass
 
-            self.rectangle_selector = None
+            setattr(
+                self,
+                attribute_name,
+                None,
+            )
+
+    def _activate_profile_selector(self) -> None:
+        self._disconnect_profile_selectors()
+
+        if len(self.full_fids) == 0:
+            return
+
+        selection_mode = (
+            self.selection_mode_combo.currentData()
+            or "rectangle"
+        )
+
+        if selection_mode == "lasso":
+            self.lasso_selector = LassoSelector(
+                self.axes,
+                self._lasso_selected,
+                useblit=True,
+                button=1,
+            )
+            return
+
+        self.rectangle_selector = RectangleSelector(
+            self.axes,
+            self._rectangle_selected,
+            useblit=True,
+            button=[1],
+            minspanx=2,
+            minspany=2,
+            spancoords="pixels",
+            interactive=False,
+        )
+
+    def _selection_instruction(self) -> str:
+        if (
+            self.selection_mode_combo.currentData()
+            == "lasso"
+        ):
+            return (
+                "Click a point or draw a freehand lasso "
+                "to select features."
+            )
+
+        return (
+            "Click a point or drag a rectangle "
+            "to select features."
+        )
+
+    def _selection_mode_changed(
+        self,
+        *args,
+    ) -> None:
+        if len(self.full_fids) == 0:
+            return
+
+        self._activate_profile_selector()
+        self._update_selected_markers()
+
+    def _draw_profile(self) -> None:
+        self.axes.clear()
+        self._disconnect_profile_selectors()
 
         if len(self.full_fids) == 0:
             self.scatter = None
@@ -1500,18 +1590,7 @@ class ICESat2ProfileDialog(QDialog):
 
         self.figure.tight_layout()
 
-        self.rectangle_selector = (
-            RectangleSelector(
-                self.axes,
-                self._rectangle_selected,
-                useblit=True,
-                button=[1],
-                minspanx=2,
-                minspany=2,
-                spancoords="pixels",
-                interactive=False,
-            )
-        )
+        self._activate_profile_selector()
 
         self._update_selected_markers()
         self.canvas.draw_idle()
@@ -1534,8 +1613,8 @@ class ICESat2ProfileDialog(QDialog):
         self.status_label.setText(
             detail
             + f" Excluded in this session: {rejected_count:,}."
-            + " Click a point or drag a rectangle "
-            "to select features."
+            + " "
+            + self._selection_instruction()
         )
 
     def _axis_label(
@@ -1703,6 +1782,67 @@ class ICESat2ProfileDialog(QDialog):
             selected_ids
         )
 
+    def _lasso_selected(
+        self,
+        vertices,
+    ) -> None:
+        if (
+            self.layer is None
+            or len(self.full_fids) == 0
+        ):
+            return
+
+        vertex_array = np.asarray(
+            vertices,
+            dtype=float,
+        )
+
+        if (
+            vertex_array.ndim != 2
+            or vertex_array.shape[0] < 3
+            or vertex_array.shape[1] != 2
+            or not np.isfinite(vertex_array).all()
+        ):
+            return
+
+        polygon = MatplotlibPath(
+            vertex_array
+        )
+        mask = np.zeros(
+            len(self.full_fids),
+            dtype=bool,
+        )
+        chunk_size = 250000
+
+        for start in range(
+            0,
+            len(self.full_fids),
+            chunk_size,
+        ):
+            stop = min(
+                start + chunk_size,
+                len(self.full_fids),
+            )
+            points = np.column_stack(
+                (
+                    self.full_x[start:stop],
+                    self.full_y[start:stop],
+                )
+            )
+            mask[start:stop] = polygon.contains_points(
+                points
+            )
+
+        selected_ids = set(
+            self.full_fids[mask]
+            .astype(int)
+            .tolist()
+        )
+
+        self._set_layer_selection(
+            selected_ids
+        )
+
     def _set_layer_selection(
         self,
         feature_ids: set[int],
@@ -1779,7 +1919,8 @@ class ICESat2ProfileDialog(QDialog):
         self.status_label.setText(
             f"Valid profile points: "
             f"{len(self.full_fids):,}. "
-            f"Selected: {selected_count:,}."
+            f"Selected: {selected_count:,}. "
+            + self._selection_instruction()
         )
 
     def clear_selection(self) -> None:
@@ -2001,6 +2142,7 @@ class ICESat2ProfileDialog(QDialog):
         self.canvas.draw_idle()
 
     def closeEvent(self, event) -> None:
+        self._disconnect_profile_selectors()
         self._disconnect_layer()
         super().closeEvent(event)
 

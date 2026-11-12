@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from qgis.PyQt.QtCore import QDate, Qt
 from qgis.PyQt.QtWidgets import (
     QApplication,
@@ -218,8 +220,26 @@ class ICESat2Dialog(QDialog):
             "Use selected polygon"
         )
 
+        self.selected_polygon_note = QLabel(
+            "To use this option, first make a polygon layer active in QGIS "
+            "and select exactly one polygon feature in the map or attribute "
+            "table. Then click Use selected polygon."
+        )
+        self.selected_polygon_note.setWordWrap(True)
+        self.selected_polygon_note.setProperty("muted", True)
+
         self.aoi_type_label = QLabel(
             "Area type: bounding box"
+        )
+
+        self.coordinate_crs_note = QLabel(
+            "Coordinate entry uses decimal degrees for geographic "
+            "longitude/latitude in WGS 84 (EPSG:4326)."
+        )
+        self.coordinate_crs_note.setWordWrap(True)
+        self.coordinate_crs_note.setProperty(
+            "muted",
+            True,
         )
 
         # ------------------------------------------------------------------
@@ -242,6 +262,56 @@ class ICESat2Dialog(QDialog):
         )
         self.atl24_release_note.setWordWrap(True)
         self.atl24_release_note.setProperty(
+            "muted",
+            True,
+        )
+
+        self.atl24_class_0_check = QCheckBox(
+            "Class 0 — unclassified"
+        )
+        self.atl24_class_1_check = QCheckBox(
+            "Class 1 — other"
+        )
+        self.atl24_class_40_check = QCheckBox(
+            "Class 40 — bathymetry"
+        )
+        self.atl24_class_41_check = QCheckBox(
+            "Class 41 — sea surface"
+        )
+
+        self.atl24_class_40_check.setChecked(True)
+
+        self.atl24_class_filter_widget = QWidget()
+        self.atl24_class_filter_layout = QVBoxLayout(
+            self.atl24_class_filter_widget
+        )
+        self.atl24_class_filter_layout.setContentsMargins(
+            0,
+            0,
+            0,
+            0,
+        )
+        self.atl24_class_filter_layout.setSpacing(2)
+        self.atl24_class_filter_layout.addWidget(
+            self.atl24_class_0_check
+        )
+        self.atl24_class_filter_layout.addWidget(
+            self.atl24_class_1_check
+        )
+        self.atl24_class_filter_layout.addWidget(
+            self.atl24_class_40_check
+        )
+        self.atl24_class_filter_layout.addWidget(
+            self.atl24_class_41_check
+        )
+
+        self.atl24_class_filter_note = QLabel(
+            "Select one or more classes. Class 40 is bathymetry; "
+            "classes 0, 1, 40 and 41 are unclassified, other, bathymetry "
+            "and sea surface, respectively."
+        )
+        self.atl24_class_filter_note.setWordWrap(True)
+        self.atl24_class_filter_note.setProperty(
             "muted",
             True,
         )
@@ -563,9 +633,15 @@ class ICESat2Dialog(QDialog):
         # ------------------------------------------------------------------
 
         self.output_path_edit = QLineEdit()
-        self.output_path_edit.setReadOnly(
-            True
+        self.output_path_edit.setReadOnly(False)
+        self.output_path_edit.setPlaceholderText(
+            "ATL24_output.gpkg"
         )
+        self.output_path_edit.setToolTip(
+            "You can type or edit the output path directly. Product-coded "
+            "filenames update when the product changes."
+        )
+        self._output_path_product: str | None = None
 
         self.browse_button = QPushButton(
             "Browse..."
@@ -601,7 +677,7 @@ class ICESat2Dialog(QDialog):
         # ------------------------------------------------------------------
 
         self.run_button = QPushButton(
-            "Download ATL24 bathymetry"
+            "Download ATL24 data"
         )
 
         self.cancel_button = QPushButton(
@@ -681,6 +757,15 @@ class ICESat2Dialog(QDialog):
         layout.addRow(
             "",
             self.atl24_release_note,
+        )
+
+        layout.addRow(
+            "Photon class filter:",
+            self.atl24_class_filter_widget,
+        )
+        layout.addRow(
+            "",
+            self.atl24_class_filter_note,
         )
 
         layout.addRow(
@@ -907,7 +992,7 @@ class ICESat2Dialog(QDialog):
                 "ICESat-2 Data Explorer",
                 "Download, document and visualize ICESat-2 products in QGIS.",
                 "plugin.svg",
-                "v0.10.1",
+                "v0.10.3",
             )
         )
 
@@ -976,6 +1061,10 @@ class ICESat2Dialog(QDialog):
         area_group = QGroupBox("Area of interest")
         area_layout = QVBoxLayout(area_group)
 
+        area_layout.addWidget(
+            self.coordinate_crs_note
+        )
+
         coordinates = QGridLayout()
         coordinates.addWidget(QLabel("West:"), 0, 0)
         coordinates.addWidget(self.west_spin, 0, 1)
@@ -994,6 +1083,8 @@ class ICESat2Dialog(QDialog):
         area_buttons.addWidget(self.draw_polygon_button)
         area_buttons.addWidget(self.use_selected_polygon_button)
         area_layout.addLayout(area_buttons)
+
+        area_layout.addWidget(self.selected_polygon_note)
 
         self.aoi_type_label.setProperty("muted", True)
         area_layout.addWidget(self.aoi_type_label)
@@ -1039,6 +1130,8 @@ class ICESat2Dialog(QDialog):
         """
         Update product-specific controls.
         """
+        self._update_output_path_for_product(product)
+
         product_colors = {
             "ATL03": "#7b5aa6",
             "ATL08": "#4f8f32",
@@ -1065,7 +1158,7 @@ class ICESat2Dialog(QDialog):
             )
 
             self.run_button.setText(
-                "Download ATL24 bathymetry"
+                "Download ATL24 data"
             )
 
             self.run_button.setEnabled(
@@ -1129,9 +1222,9 @@ class ICESat2Dialog(QDialog):
             self.product_combo.currentText()
         )
 
-        default_name = (
-            f"{product}_output.gpkg"
-        )
+        default_name = self.output_path_edit.text().strip()
+        if not default_name:
+            default_name = f"{product}_output.gpkg"
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -1152,6 +1245,37 @@ class ICESat2Dialog(QDialog):
             file_path
         )
 
+    def _update_output_path_for_product(
+        self,
+        product: str,
+    ) -> None:
+        """Update only product-coded output names when the product changes."""
+        current = self.output_path_edit.text().strip()
+        previous_product = self._output_path_product
+
+        if not current:
+            self.output_path_edit.setText(
+                f"{product}_output.gpkg"
+            )
+        elif previous_product and previous_product.lower() in Path(current).name.lower():
+            filename = Path(current).name
+            token_start = filename.lower().find(
+                previous_product.lower()
+            )
+            updated_filename = (
+                filename[:token_start]
+                + product
+                + filename[token_start + len(previous_product):]
+            )
+            path_parent = Path(current).parent
+            self.output_path_edit.setText(
+                str(path_parent / updated_filename)
+                if str(path_parent) not in ("", ".")
+                else updated_filename
+            )
+
+        self._output_path_product = product
+
     def get_selected_product(self) -> str:
         return (
             self.product_combo.currentText()
@@ -1163,6 +1287,20 @@ class ICESat2Dialog(QDialog):
             release
             or "002"
         )
+
+    def get_atl24_class_filter(self) -> list[int]:
+        selected_classes = []
+
+        for class_code, checkbox in (
+            (0, self.atl24_class_0_check),
+            (1, self.atl24_class_1_check),
+            (40, self.atl24_class_40_check),
+            (41, self.atl24_class_41_check),
+        ):
+            if checkbox.isChecked():
+                selected_classes.append(class_code)
+
+        return selected_classes
 
     def get_atl08_display_field(
         self,

@@ -1,31 +1,40 @@
-ICESat-2 Data Explorer v0.6.1 — Installation and portability
-==============================================================
+ICESat-2 Data Explorer v0.10.3 - Installation and portability
+===============================================================
 
 Recommended QGIS target
 -----------------------
-QGIS 3.44.1 (Python 3.12), Windows.
-The metadata declares QGIS 3.34 as the minimum version, but this build was
-prepared around the QGIS 3.44.1 environment used during development.
+QGIS 3.44 or later. QGIS 3.44 LTR on Windows is the validated
+environment for this stable release.
 
-Install from ZIP
-----------------
+Install and open the plugin
+---------------------------
 1. Open QGIS.
-2. Plugins > Manage and Install Plugins > Install from ZIP.
-3. Select the complete ZIP file.
+2. Go to Plugins > Manage and Install Plugins.
+3. Install ICESat-2 Data Explorer from the repository or choose
+   Install from ZIP and select the complete release ZIP.
 4. Enable ICESat-2 Data Explorer.
+5. In QGIS, make sure that ICESat-2 Data Explorer is enabled, and then
+   go to Plugins > ICESat-2 Data Explorer > Data Explorer.
 
-External dependencies
----------------------
-The plugin folder contains the plugin code, icons and report templates.
-It does not bundle the SlideRule Python client or its compiled scientific
-Python dependencies.
+SlideRule download support
+--------------------------
+The SlideRule download support needs to be installed only once for each
+QGIS installation/profile. After opening the Data Explorer window in Step 5,
+click "Install download support" in the "Download support" section.
 
-ATL03, ATL08, ATL13 and ATL24 downloads require the SlideRule Python client
-to be installed and importable in the Python environment used by QGIS.
+The managed download support is used by ATL03, ATL08, ATL13 and ATL24.
+It does not require NASA Earthdata Login for the plugin's SlideRule workflow.
 
-Model tide support is managed separately by the plugin. On a new QGIS
-profile or computer, open Model Tide Values and run Install tide support,
-then download GOT4.10c.
+Optional modules
+----------------
+Model Tide Values uses a separate isolated environment. On a new QGIS
+installation/profile, open Model Tide Values, install tide support and then
+download GOT4.10c.
+
+HDF5 Converter is a separate local-file module. Open HDF5 Converter and click
+"Install HDF5 support" to install h5py automatically for the active QGIS
+installation/profile. This is normally required only once. The converter never
+modifies the selected ATL03, ATL08, ATL13 or ATL24 source granule.
 
 Important Windows note
 ----------------------
@@ -33,11 +42,13 @@ A separate user-level Python package folder such as:
 
     C:\Users\<user>\AppData\Roaming\Python\Python312\site-packages
 
-can override the scientific packages shipped with QGIS. If QGIS imports
-NumPy from that folder and reports binary/import errors, reinstalling QGIS
-alone may not remove the conflicting user-level packages.
+can override scientific packages supplied with QGIS. If QGIS imports NumPy,
+h5py or another compiled dependency from an incompatible folder and reports
+binary/import errors, inspect the active QGIS Python paths before reinstalling
+the plugin.
 
-
-QGIS OFFICIAL REPOSITORY NOTE
+QGIS official repository note
 -----------------------------
-This distribution targets QGIS 3.44-3.99 and is experimental until Linux/macOS validation is completed. External dependencies are installed at runtime; no binary wheels or tide-model files are bundled in the plugin ZIP.
+This package keeps version 0.10.3, declares QGIS 3.44-3.99 and is marked
+stable with experimental=False. External dependency binaries and tide-model
+files are not bundled in the plugin ZIP.
