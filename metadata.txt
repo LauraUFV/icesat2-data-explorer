@@ -1,7 +1,7 @@
 [general]
 name=ICESat-2 Data Explorer
 description=Download, convert, visualize and analyze ICESat-2 ATL03, ATL08, ATL13 and ATL24 data in QGIS.
-about=Access ATL03, ATL08, ATL13 and ATL24 data in QGIS; convert local HDF5 granules; inspect interactive profiles; create provenance reports; and optionally add GOT4.10c model tide values to ATL24. Requires QGIS 3.44 or later.
+about=Access ATL03, ATL08, ATL13 and ATL24 data in QGIS; convert local HDF5 granules; inspect interactive profiles; create provenance reports; and optionally add GOT4.10c model tide values to ATL24. Requires QGIS 3.44 or later. External Python dependencies are installed on demand through the plugin: SlideRule Python client 5.5.0 for downloads, h5py for local HDF5 conversion, and optional pyTMD 3.0.9 with h5netcdf and Dask in an isolated environment for model tides. GOT4.10c is downloaded separately at runtime and is not bundled. NumPy, pandas and GeoPandas must be available in a compatible QGIS Python environment. See README.md and docs/USER_GUIDE.md for installation instructions.
 version=0.10.3
 qgisMinimumVersion=3.44
 qgisMaximumVersion=3.99
